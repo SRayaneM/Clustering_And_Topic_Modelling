@@ -2,19 +2,58 @@
 <html>
   <head>
     <title>Topic Modeling</title>
+    <link rel="stylesheet" href="stylesheet.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@0,300;0,400;0,500;1,200;1,300&family=Roboto:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
-    <h1>Research labeling</h1>
-    <p>
-      You can input the abstract of any STEM related research paper, and our
-      model will provide you with the re-occuring topics of that paper.
-    </p>
-    <form method="post" action="{{ url_for('predict') }}">
-      <label for="input_text">Enter your text input:</label>
-      <br />
-      <textarea name="input_text" rows="5" cols="50"></textarea>
-      <br />
-      <input type="submit" value="Predict" />
-    </form>
+    <div class="input_form">
+      <h1 id="title_header">Research labelling</h1>
+      <p>
+        You can input the abstract of any STEM related research paper, and our
+        model will provide you with the re-occuring topics of that paper.
+      </p>
+      <form action="result.html">
+        <label for="input_text">Enter your <b>abstract</b> input:</label>
+        <br />
+        <br />
+        <textarea id="input_text" rows="5" cols="50"></textarea>
+        <br />
+        <button type="submit" class="sub">Submit</button>
+      </form>
+    </div>
+
+    <footer class="site-footer">
+      <div class="container">
+        <div class="row">
+          <div class="col-sm-12 col-md-6">
+            <h6>About</h6>
+            <p class="text-justify">This project was developed by <b>Smail Rayane Moudjeb</b> and his links can be found here. 
+              This project uses artificial intelligence models to determine the topics in a given paper and label it accordingly in this implementation, 
+              only certain STEM topics can be determined. 
+              With further developements, this project will be able to predict the topics of different research papers.
+            </p>
+          </div>
+
+    <div class="container">
+      <div class="row">
+        <div class="col-md-8 col-sm-6 col-xs-12">
+          <p class="copyright-text">Copyright &copy; 2023 All Rights Reserved by.
+          </p>
+        </div>
+
+        <div class="col-md-4 col-sm-6 col-xs-12">
+          <ul class="social-icons">
+            <li><a class="github" href="https://github.com/SRayaneM" img="icon-github" src="github.png"><i class="fa fa-github"></i></a></li>
+            <li><a class="linkedin" href="https://www.linkedin.com/in/smail-rayane-moudjeb/" img="icon-linkedin" src="linkedin.png"><i class="fa fa-linkedin"></i></a></li>   
+          </ul>
+        </div>
+      </div>
+    </div>
+</footer>
   </body>
 </html>
