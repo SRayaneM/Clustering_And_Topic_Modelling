@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Topic Modeling</title>
+  </head>
+  <body>
+    <h1>Research labeling</h1>
+    <p>
+      You can input the abstract of any STEM related research paper, and our
+      model will provide you with the re-occuring topics of that paper.
+    </p>
+    <form method="post" action="{{ url_for('predict') }}">
+      <label for="input_text">Enter your text input:</label>
+      <br />
+      <textarea name="input_text" rows="5" cols="50"></textarea>
+      <br />
+      <input type="submit" value="Predict" />
+    </form>
+  </body>
+</html>
