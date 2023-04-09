@@ -5,14 +5,12 @@ import gensim
 from gensim.utils import simple_preprocess
 from gensim.models.ldamodel import LdaModel
 from gensim.corpora.dictionary import Dictionary
+import pickle
 
 app = Flask(__name__)
 
 # Load the LDA model
-lda_model = LdaModel.load('Main/model.pkl')
-
-# Load the dictionary
-dictionary = Dictionary.load('Main/model.pkl')
+lda_model = pickle.load(open('Main/model.pkl', 'rb'))
 
 
 # Define a function to preprocess the text
@@ -24,7 +22,7 @@ def preprocess_text(text):
 # Define a function to get the topic probabilities for an abstract
 def get_topic_probabilities(abstract):
     processed_abstract = preprocess_text(abstract)
-    bow_abstract = dictionary.doc2bow(processed_abstract)
+    bow_abstract = lda_model.id2word.doc2bow(processed_abstract)
     topic_probabilities = lda_model.get_document_topics(bow_abstract)
     return topic_probabilities
 
@@ -56,7 +54,7 @@ def home():
     return render_template('index.html')
 
 
-@app.route('/predict', methods=['POST'])
+@app.route('/index.html', methods=['POST'])
 def predict():
     abstract = request.form['abstract']
     topic_probabilities = get_topic_probabilities(abstract)
