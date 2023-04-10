@@ -15,7 +15,10 @@ lda_model = pickle.load(open('Main/model.pkl', 'rb'))
 
 # Define a function to preprocess the text
 def preprocess_text(text):
-    processed_text = simple_preprocess(text, deacc=True, min_len=2, max_len=15)
+    processed_text = simple_preprocess(text,
+                                       deacc=True,
+                                       min_len=2,
+                                       max_len=1500)
     return processed_text
 
 
