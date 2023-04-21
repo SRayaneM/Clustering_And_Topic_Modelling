@@ -1,120 +1,87 @@
 import streamlit as st
-from PIL import Image
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics.pairwise import cosine_similarity
-from bs4 import BeautifulSoup
-import requests
-import time, os
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
+import gensim
 
-from selenium.common.exceptions import NoSuchElementException
+# Load data and train the LDA model
+final_df = pd.read_csv('Main\Abstract_With_topics.csv')
 
-import streamlit as st
-from PIL import Image
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from bs4 import BeautifulSoup
-import requests
-import time, os
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
+preprocessed_data = [
+    gensim.utils.simple_preprocess(doc) for doc in final_df['ABSTRACT']
+]
+dictionary = gensim.corpora.Dictionary(preprocessed_data)
+bow_corpus = [dictionary.doc2bow(doc) for doc in preprocessed_data]
+lda_model = gensim.models.LdaModel(bow_corpus,
+                                   num_topics=5,
+                                   id2word=dictionary)
 
-from selenium.common.exceptions import NoSuchElementException
+# Generate labeled data
+lda_data = []
+for i, doc in enumerate(preprocessed_data):
+    topics = lda_model.get_document_topics(bow_corpus[i])
+    topic_probs = [0] * lda_model.num_topics
+    for topic in topics:
+        topic_probs[topic[0]] = topic[1]
+    topic_label = max(range(len(topic_probs)), key=topic_probs.__getitem__)
+    lda_data.append((final_df['ABSTRACT'][i], final_df['ABSTRACT_Topic'][i]))
 
-st.sidebar.success("Select a page")
+# Train a Multinomial Naive Bayes classifier
+tfidf_vectorizer = TfidfVectorizer(max_df=0.8, min_df=5, stop_words='english')
+X_tfidf = tfidf_vectorizer.fit_transform([x[0] for x in lda_data])
+y = [x[1] for x in lda_data]
+clf = MultinomialNB().fit(X_tfidf, y)
 
-header = st.container()
-with header:
-    st.title('Research Paper Abstract Recommendation System')
+# Train a Multinomial Naive Bayes classifier
+tfidf_vectorizer = TfidfVectorizer(max_df=0.8, min_df=5, stop_words='english')
+X_tfidf = tfidf_vectorizer.fit_transform([x[0] for x in lda_data])
+y = [x[1] for x in lda_data]
+clf = RandomForestClassifier().fit(X_tfidf, y)
 
-    text1 = '<p style="font-family:Courier; font-size: 24px;">An abstract is a short summary of your completed research. It is intended to describe your work without going into great detail.</p>'
-    st.markdown(text1, unsafe_allow_html=True)
+# Compute document similarities
+doc_similarities = cosine_similarity(X_tfidf)
 
-    #Importing the data set
-    data = pd.read_csv('Main/abstracts.csv')
-    train_df = data.head(10000)
+# Define a function to classify input text and recommend similar articles
+def classify_text(text):
+    preprocessed_text = gensim.utils.simple_preprocess(text)
+    bow_vector = dictionary.doc2bow(preprocessed_text)
+    topic_probs = lda_model.get_document_topics(bow_vector)
+    topic_probs = [x[1] for x in topic_probs]
+    X_tfidf = tfidf_vectorizer.transform([text])
+    topic_label = clf.predict(X_tfidf)[0]
 
-    #### TF-IDF
-    TF_IDF = TfidfVectorizer()
-    TF_IDF_ = TF_IDF.fit_transform(train_df['ABSTRACT'])
-    df_tf = pd.DataFrame(TF_IDF_.toarray(),
-                         columns=TF_IDF.get_feature_names_out())
+    # Find similar articles
+    doc_index = final_df[final_df['ABSTRACT'] == text].index[0]
+    doc_similarities_sorted = sorted(enumerate(doc_similarities[doc_index]),
+                                     key=lambda x: x[1],
+                                     reverse=True)
+    top_docs = [x[0] for x in doc_similarities_sorted if x[0] != doc_index][:3]
+    recommendations = final_df.iloc[top_docs]['ABSTRACT'].tolist()
 
-    #### Cosine Similarity
-    sim = pd.DataFrame(cosine_similarity(df_tf, df_tf))
+    return topic_label, recommendations
 
-    #### Function 1
-    def recommend(Abstract):
-        abs_id = train_df[(train_df.ABSTRACT == Abstract)][
-            train_df['id']].values[0]  #getting the id of the abstract
-        scores = list(
-            enumerate(sim[abs_id])
-        )  #getting the corresponding sim values for input abstract
-        sorted_scores = sorted(scores, key=lambda x: x[1],
-                               reverse=True)  # Sorting sim values
-        sorted_scores = sorted_scores[1:]
-        abstracts = [
-            train_df[abstracts[0] == train_df['id']]['ABSTRACT'].values[0]
-            for abstracts in sorted_scores
-        ]
-        return abstracts
 
-    #### Function 2
-    def recommend_3(abstract_list):
-        first_3 = []
-        count = 0
-        for abstract in abstract_list:
-            if count > 2:
-                break
-            count += 1
-            first_3.append(abstract)
+# Define the Streamlit app
+def predict_page():
+    st.title('Topic Classification and Recommendation App')
+    st.write(
+        'This app allows you to classify a piece of text into one of the topics in our dataset and receive recommendations for similar articles.'
+    )
 
-        return first_3
+    # Create a text input for the user to enter their text
+    user_input = st.text_input('Enter your text here:')
 
-    #### prompting input
-    sel_col, disp_col = st.columns(2)
-    my_abstract = sel_col.text_input('Enter your abstract:', '')
-    list_ = recommend(my_abstract)
-    recommendations = recommend_3(list_)
+    # Classify the user's input and display the topic label and recommendations when they click the "Classify" button
+    if st.button('Classify'):
+        topic_label, recommendations = classify_text(user_input)
+        st.write(f'The input text belongs to the {topic_label} topic.')
+        st.write('Here are some similar articles:')
+        for i, recommendation in enumerate(recommendations):
+            st.write(f'{i+1}. {recommendation}')
 
-chromedriver = "Main\chromedriver.exe"
-os.environ["webdriver.chrome.driver"] = chromedriver
-chromeOptions = webdriver.ChromeOptions()
-prefs = {"profile.managed_default_content_settings.images": 2}
-chromeOptions.add_experimental_option("prefs", prefs)
-driver = webdriver.Chrome(chromedriver, chrome_options=chromeOptions)
-driver.get(
-    "https://www.google.com/search?q=m&sxsrf=AOaemvJMpDSDsv17E3QxjxLdOqymXdlF-w%3A1636528339453&source=hp&ei=03CLYa6xGNqQ9u8Pi_easAw&iflsig=ALs-wAMAAAAAYYt-4y-vV258A6wGAFwH3mzAyuz4bXnn&oq=m&gs_lcp=Cgdnd3Mtd2l6EAMyBAgjECcyBAgjECcyBAgjECcyCwgAEIAEELEDEIMBMggIABCABBCxAzIFCAAQsQMyBQgAELEDMgsIABCABBCxAxCDATIICC4QgAQQsQMyCAguELEDEIMBOgcIIxDqAhAnUIYDWIYDYM0FaAFwAHgAgAGjAYgBowGSAQMwLjGYAQCgAQGwAQo&sclient=gws-wiz&ved=0ahUKEwju5taSn430AhVaiP0HHYu7BsYQ4dUDCAY&uact=5"
-)
 
-for i in range(len(recommendations)):
-
-    search_box = driver.find_element_by_xpath(
-        '/html/body/div[4]/div[2]/form/div[1]/div[1]/div[2]/div/div[2]/input'
-    )  # search bar xpath
-    #clear the current search
-    search_box.clear()
-    #input new search
-    search_box.send_keys(recommendations[i])  # abstract
-    #hit enter
-    search_box.send_keys(Keys.RETURN)
-    time.sleep(1)
-    try:
-        title = driver.find_element_by_xpath(
-            '//*[@id="rso"]/div[1]/div/div/div[1]/a/h3/span')
-        link = driver.find_element_by_xpath(
-            '//*[@id="rso"]/div[1]/div/div/div[1]/a')
-        st.write(title.text, '\n\n')
-        st.write(link.get_attribute("href"), '\n\n')
-        st.write(recommendations[i], '\n\n\n\n')
-
-    except NoSuchElementException:
-
-        st.write('\n', 'Search Google More Thoroughly', '\n\n')
-        st.write('Search Google More Thoroughly', '\n\n')
-        st.write(recommendations[i], '\n\n\n')
+# Run the Streamlit app
+if __name__ == '__main__':
+    predict_page()

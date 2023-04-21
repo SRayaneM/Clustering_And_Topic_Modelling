@@ -1,94 +1,89 @@
 import streamlit as st
 import pandas as pd
-import nltk
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics.pairwise import cosine_similarity
 import gensim
-import spacy
 
-nltk.download('punkt')
-from gensim.utils import simple_preprocess
-from gensim.models import CoherenceModel
-from nltk.corpus import stopwords
-from gensim import corpora
-from gensim.models.ldamodel import LdaModel
+# Load data and train the LDA model
+final_df = pd.read_csv('Main\Abstract_With_topics.csv')
 
-# Load the LDA model
-lda_model = gensim.models.ldamodel.LdaModel.load('Main\Model\lda_model.model')
+preprocessed_data = [
+    gensim.utils.simple_preprocess(doc) for doc in final_df['ABSTRACT']
+]
+dictionary = gensim.corpora.Dictionary(preprocessed_data)
+bow_corpus = [dictionary.doc2bow(doc) for doc in preprocessed_data]
+lda_model = gensim.models.LdaModel(bow_corpus,
+                                   num_topics=5,
+                                   id2word=dictionary)
 
-# Load the LDA model
-lda_model = LdaModel.load('Main\Model\lda_model.model')
+# Generate labeled data
+lda_data = []
+for i, doc in enumerate(preprocessed_data):
+    topics = lda_model.get_document_topics(bow_corpus[i])
+    topic_probs = [0] * lda_model.num_topics
+    for topic in topics:
+        topic_probs[topic[0]] = topic[1]
+    topic_label = max(range(len(topic_probs)), key=topic_probs.__getitem__)
+    lda_data.append((final_df['ABSTRACT'][i], final_df['ABSTRACT_Topic'][i]))
 
-#Load data set
-train_df = pd.read_csv('abstracts.csv')
+# Train a random forest classifier
+tfidf_vectorizer = TfidfVectorizer(max_df=0.8, min_df=5, stop_words='english')
+X_tfidf = tfidf_vectorizer.fit_transform([x[0] for x in lda_data])
+y = [x[1] for x in lda_data]
+clf = RandomForestClassifier(n_estimators=100, max_depth=5).fit(X_tfidf, y)
+
+# Load another dataset for article recommendations
+recommendation_data = pd.read_csv('Main\Model\mtrain.csv')
+recommendation_tfidf = tfidf_vectorizer.transform(
+    recommendation_data['ABSTRACT'])
+
+
+# Define a function to classify input text and recommend similar articles
+def classify_text(text):
+    preprocessed_text = gensim.utils.simple_preprocess(text)
+    bow_vector = dictionary.doc2bow(preprocessed_text)
+    topic_probs = lda_model.get_document_topics(bow_vector)
+    topic_probs = [x[1] for x in topic_probs]
+    X_tfidf = tfidf_vectorizer.transform([text])
+    topic_label = clf.predict(X_tfidf)[0]
+
+    # Find similar articles
+    doc_similarities = cosine_similarity(X_tfidf, recommendation_tfidf)
+    doc_similarities_sorted = sorted(enumerate(doc_similarities[0]),
+                                     key=lambda x: x[1],
+                                     reverse=True)
+    top_docs = [x[0] for x in doc_similarities_sorted][:3]
+    recommendations = []
+    for doc_index in top_docs:
+        title = recommendation_data.iloc[doc_index]['TITLE']
+        abstract = recommendation_data.iloc[doc_index]['ABSTRACT']
+        recommendations.append((title, abstract))
+
+    return topic_label, recommendations
 
 
 # Define the Streamlit app
 def app():
-    # Set up the app title and sidebar
-    st.title('Research Article Abstract Topic Analysis')
-    st.write('Select Input Options')
+    st.title('Topic Classification and Recommendation App')
+    st.write(
+        'This app allows you to classify a piece of text into one of the topics in our dataset and receive recommendations for similar articles.'
+    )
 
-    # Define the input options
-    input_option = st.selectbox('Select Input Option',
-                                ['Upload a file', 'Enter text'])
+    # Create a text input for the user to enter their text
+    user_input = st.text_input('Enter your text here:')
 
-    # Define the file uploader
-    if input_option == 'Upload a file':
-        uploaded_file = st.file_uploader('Choose a file')
-        if uploaded_file is not None:
-            abstract = uploaded_file.read()
-    else:
-        abstract = st.text_area('Enter the Abstract')
-
-    # Define the topic analysis button
-    if st.button('Analyze Topics'):
-        # Process the abstract
-        stop_words = stopwords.words('english')
-
-        #We then create a function to remove the stopwords in our text.
-        def remove_stopwords(text):
-            text_Array = text.split(' ')
-            remove_words = " ".join(
-                [i for i in text_Array if i not in stop_words])
-            return remove_words
-
-            #And here we will apply the remove_stopwords function. This will remove the stopwords from our dataset's text
-            train_df['ABSTRACT'] = train_df['ABSTRACT'].apply(remove_stopwords)
-
-        def lemmatization(texts, allowed_postags=['VERB', 'ADV', 'ADJ']):
-            nlp = spacy.load('en_core_web_sm', disable=['parser', 'ner'])
-            output = []
-            for sent in texts:
-                doc = nlp(sent)
-                output.append([
-                    token.lemma_ for token in doc
-                    if token.pos_ in allowed_postags
-                ])
-            return output
-
-        text_list = train_df['ABSTRACT'].tolist()
-
-        tokenized_reviews = lemmatization(text_list)
-
-        # Get the topics and associated probabilities
-        topics = lda_model.get_document_topics(tokenized_reviews)
-
-        # Display the results
-        st.write('Topic Analysis Results:')
-            num_topics = lda_model.num_topics
-            for i, topic in enumerate(topics):
-                if i >= num_topics:
-                    break
-
-                topic_id = topic[0]
-                topic_prob = topic[1]
-                if topic_id < num_topics:
-                    st.write(
-                        f'Topic {topic_id}: {topic_prob:.3f} - {lda_model.print_topic(topic_id)}'
-                    )
-
-        st.write(topic_id)
-        st.write(num_topics)
+    # Classify the user's input and display the topic label and recommendations when they click the "Classify" button
+    if st.button('Classify'):
+        topic_label, recommendations = classify_text(user_input)
+        st.write(f'Topic label: {topic_label}')
+        st.write('Recommended articles:')
+        for i, (title, abstract) in enumerate(recommendations):
+            st.write(f'{i+1}. {title}')
+            st.write(f'{abstract}\n')
 
 
-if __name__ == "__main__":
+# Run the Streamlit app
+if __name__ == '__main__':
     app()
