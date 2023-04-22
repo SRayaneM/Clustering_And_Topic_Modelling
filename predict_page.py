@@ -3,7 +3,9 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics.pairwise import cosine_similarity
+from scholarly import scholarly
+import pyLDAvis
+import pyLDAvis.gensim_models as gensimvis
 import gensim
 
 # Load data and train the LDA model
@@ -28,20 +30,12 @@ for i, doc in enumerate(preprocessed_data):
     topic_label = max(range(len(topic_probs)), key=topic_probs.__getitem__)
     lda_data.append((final_df['ABSTRACT'][i], final_df['ABSTRACT_Topic'][i]))
 
-# Train a Multinomial Naive Bayes classifier
+# Train a random forest classifier
 tfidf_vectorizer = TfidfVectorizer(max_df=0.8, min_df=5, stop_words='english')
 X_tfidf = tfidf_vectorizer.fit_transform([x[0] for x in lda_data])
 y = [x[1] for x in lda_data]
-clf = MultinomialNB().fit(X_tfidf, y)
+clf = RandomForestClassifier(n_estimators=100, max_depth=5).fit(X_tfidf, y)
 
-# Train a Multinomial Naive Bayes classifier
-tfidf_vectorizer = TfidfVectorizer(max_df=0.8, min_df=5, stop_words='english')
-X_tfidf = tfidf_vectorizer.fit_transform([x[0] for x in lda_data])
-y = [x[1] for x in lda_data]
-clf = RandomForestClassifier().fit(X_tfidf, y)
-
-# Compute document similarities
-doc_similarities = cosine_similarity(X_tfidf)
 
 # Define a function to classify input text and recommend similar articles
 def classify_text(text):
@@ -53,12 +47,20 @@ def classify_text(text):
     topic_label = clf.predict(X_tfidf)[0]
 
     # Find similar articles
-    doc_index = final_df[final_df['ABSTRACT'] == text].index[0]
-    doc_similarities_sorted = sorted(enumerate(doc_similarities[doc_index]),
-                                     key=lambda x: x[1],
-                                     reverse=True)
-    top_docs = [x[0] for x in doc_similarities_sorted if x[0] != doc_index][:3]
-    recommendations = final_df.iloc[top_docs]['ABSTRACT'].tolist()
+    query = scholarly.search_pubs(topic_label)
+    recommendations = []
+    i = 0
+    while i < 3:
+        try:
+            publication = next(query)
+            if publication and 'bib' in publication and publication['bib'].get(
+                    'abstract'):
+                doi = publication['bib'].get('doi', 'N/A')
+                recommendations.append((publication['bib']['title'],
+                                        publication['bib']['abstract'], doi))
+                i += 1
+        except StopIteration:
+            break
 
     return topic_label, recommendations
 
@@ -69,17 +71,33 @@ def predict_page():
     st.write(
         'This app allows you to classify a piece of text into one of the topics in our dataset and receive recommendations for similar articles.'
     )
+    view_dataset = st.checkbox('View dataset')
+
+    # If the checkbox is checked, display the dataset
+    if view_dataset:
+        st.write('Displaying dataset...')
+        st.write(final_df.head(10))
 
     # Create a text input for the user to enter their text
     user_input = st.text_input('Enter your text here:')
 
+    # Add a checkbox to allow the user to view the dataset
+
     # Classify the user's input and display the topic label and recommendations when they click the "Classify" button
     if st.button('Classify'):
+        st.write("These are the recommended topics from google scholar: ")
         topic_label, recommendations = classify_text(user_input)
-        st.write(f'The input text belongs to the {topic_label} topic.')
-        st.write('Here are some similar articles:')
-        for i, recommendation in enumerate(recommendations):
-            st.write(f'{i+1}. {recommendation}')
+        st.write(f'Topic label: {topic_label}')
+        if recommendations:
+            for i, (title, abstract, doi) in enumerate(recommendations):
+                st.write(f"{i + 1}. Title: {title}\n")
+                st.write(f'Abstract: {abstract}\n')
+                st.write(f'Link/DOI: {doi}\n')
+        else:
+            st.write("No recommendations found.")
+    # PyLDAvis visualization
+        vis = gensimvis.prepare(lda_model, bow_corpus, dictionary)
+        pyLDAvis.display(vis)
 
 
 # Run the Streamlit app
