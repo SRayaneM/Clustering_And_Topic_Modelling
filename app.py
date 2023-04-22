@@ -70,9 +70,15 @@ def app():
     st.write(
         'This app allows you to classify a piece of text into one of the topics in our dataset and receive recommendations for similar articles.'
     )
+    view_dataset = st.checkbox('View dataset')
 
+    # If the checkbox is checked, display the dataset
+    if view_dataset:
+        st.write('Displaying dataset...')
+        st.write(final_df.head(10))
     # Create a text input for the user to enter their text
     user_input = st.text_input('Enter your text here:')
+    # Add a checkbox to allow the user to view the dataset
 
     # Classify the user's input and display the topic label and recommendations when they click the "Classify" button
     if st.button('Classify'):
