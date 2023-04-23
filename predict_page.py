@@ -7,6 +7,9 @@ from scholarly import scholarly
 import pyLDAvis
 import pyLDAvis.gensim_models as gensimvis
 import gensim
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
 
 # Load data and train the LDA model
 final_df = pd.read_csv('Main\Abstract_With_topics.csv')
@@ -30,11 +33,21 @@ for i, doc in enumerate(preprocessed_data):
     topic_label = max(range(len(topic_probs)), key=topic_probs.__getitem__)
     lda_data.append((final_df['ABSTRACT'][i], final_df['ABSTRACT_Topic'][i]))
 
-# Train a random forest classifier
+# Split data into training and test sets
+X_train2, X_test2, y_train2, y_test2 = train_test_split(
+    [x[0] for x in lda_data], [x[1] for x in lda_data],
+    test_size=0.2,
+    random_state=42)
+
+# Convert text data to vectors using TF-IDF
 tfidf_vectorizer = TfidfVectorizer(max_df=0.8, min_df=5, stop_words='english')
-X_tfidf = tfidf_vectorizer.fit_transform([x[0] for x in lda_data])
-y = [x[1] for x in lda_data]
-clf = RandomForestClassifier(n_estimators=100, max_depth=5).fit(X_tfidf, y)
+X_train_tfidf2 = tfidf_vectorizer.fit_transform(X_train2)
+X_test_tfidf2 = tfidf_vectorizer.transform(X_test2)
+
+# Train an SVM classifier
+svcm = SVC(kernel='linear', C=1.0, random_state=42)
+svcm.fit(X_train_tfidf2, y_train2)
+y_pred2 = svcm.predict(X_test_tfidf2)
 
 
 # Define a function to classify input text and recommend similar articles
@@ -44,7 +57,7 @@ def classify_text(text):
     topic_probs = lda_model.get_document_topics(bow_vector)
     topic_probs = [x[1] for x in topic_probs]
     X_tfidf = tfidf_vectorizer.transform([text])
-    topic_label = clf.predict(X_tfidf)[0]
+    topic_label = svcm.predict(X_tfidf)[0]
 
     # Find similar articles
     query = scholarly.search_pubs(topic_label)
@@ -85,9 +98,9 @@ def predict_page():
 
     # Classify the user's input and display the topic label and recommendations when they click the "Classify" button
     if st.button('Classify'):
-        st.write("These are the recommended topics from google scholar: ")
         topic_label, recommendations = classify_text(user_input)
         st.write(f'Topic label: {topic_label}')
+        st.write("These are the recommended topics from google scholar: ")
         if recommendations:
             for i, (title, abstract, doi) in enumerate(recommendations):
                 st.write(f"{i + 1}. Title: {title}\n")
