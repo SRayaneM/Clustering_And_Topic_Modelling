@@ -62,13 +62,14 @@ def classify_text(text):
     # Find similar articles
     query = scholarly.search_pubs(topic_label)
     recommendations = []
+    num_recommendations = st.slider('Number of recommendations', 1, 10, 3)
     i = 0
-    while i < 3:
+    while i < num_recommendations:
         try:
             publication = next(query)
             if publication and 'bib' in publication and publication['bib'].get(
                     'abstract'):
-                doi = publication['bib'].get('doi', 'N/A')
+                doi = publication['bib'].get('link', '')
                 recommendations.append((publication['bib']['title'],
                                         publication['bib']['abstract'], doi))
                 i += 1
@@ -108,9 +109,6 @@ def app():
                 st.write(f'Link/DOI: {doi}\n')
         else:
             st.write("No recommendations found.")
-    # PyLDAvis visualization
-        vis = gensimvis.prepare(lda_model, bow_corpus, dictionary)
-        pyLDAvis.display(vis)
 
 
 # Run the Streamlit app
